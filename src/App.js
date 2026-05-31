@@ -322,6 +322,16 @@ function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
   const visibleAccords = showAllAccords ? allAccords : allAccords.slice(0, 12);
   return (
     <div>
+      {/* Tynn oppfordring øverst – alltid synlig */}
+      <div onClick={() => setTab("account")} style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+        background: "linear-gradient(135deg, #fce4ec, #f6e4ee)", border: "1px solid #f6d0dd",
+        borderRadius: 10, padding: "9px 14px", marginBottom: 12, cursor: "pointer",
+        fontSize: 13, color: "#c64a72", fontWeight: 600, textAlign: "center",
+      }}>
+        {t.topCta}
+      </div>
+
       {/* søk + filter-knapp på samme rad */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <input value={search} onChange={(e) => setSearch(e.target.value)}
