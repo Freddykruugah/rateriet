@@ -30,5 +30,12 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
+
+    // FORSLAG: innloggede kan foreslå nye parfymer. Bare admin kan lese køen,
+    // godkjenne (endre) eller slette. Brukeren ser ikke andres forslag.
+    match /submissions/{submissionId} {
+      allow create: if isSignedIn() && request.resource.data.submittedBy == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
   }
 }

@@ -5,7 +5,7 @@ import {
   signOut, onAuthStateChanged, updateProfile,
 } from "firebase/auth";
 import {
-  collection, addDoc, getDocs, doc, setDoc, getDoc,
+  collection, addDoc, getDocs, doc, setDoc, getDoc, deleteDoc,
 } from "firebase/firestore";
 import { SEED_PERFUMES } from "./seedData";
 import { STRINGS } from "./strings";
@@ -86,6 +86,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [perfumes, setPerfumes] = useState([]);
   const [ratings, setRatings] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [tab, setTab] = useState("discover");
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -110,17 +111,26 @@ export default function App() {
     setRatings(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, []);
 
+  // Bare admin kan lese forslagskøen (reglene tillater ikke andre)
+  const fetchSubmissions = useCallback(async () => {
+    try {
+      const snap = await getDocs(collection(db, "submissions"));
+      setSubmissions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch { setSubmissions([]); } // ignoreres for ikke-admin
+  }, []);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         const ps = await getDoc(doc(db, "users", u.uid));
         if (ps.exists()) setProfile(ps.data());
-      } else setProfile(null);
+        if (u.email === ADMIN_EMAIL) fetchSubmissions();
+      } else { setProfile(null); setSubmissions([]); }
     });
     Promise.all([fetchPerfumes(), fetchRatings()]).finally(() => setLoading(false));
     return unsub;
-  }, [fetchPerfumes, fetchRatings]);
+  }, [fetchPerfumes, fetchRatings, fetchSubmissions]);
 
   // ---------- ratings helpers ----------
   const ratingsFor = (perfumeId) => ratings.filter((r) => r.perfumeId === perfumeId);
@@ -159,6 +169,26 @@ export default function App() {
     }
     await fetchPerfumes();
     alert("Seeded!");
+  };
+
+  // ---------- brukerinnsending ----------
+  // Bruker foreslår en parfyme -> havner i submissions med status pending
+  const addSubmission = async ({ name, house, note }) => {
+    if (!user) { alert(t.signinToSuggest); return false; }
+    await addDoc(collection(db, "submissions"), {
+      name, house, note: note || "",
+      submittedBy: user.uid,
+      submittedByName: profile?.username || user.email,
+      createdAt: new Date().toISOString(),
+    });
+    if (isAdmin) fetchSubmissions();
+    return true;
+  };
+
+  // Admin avviser et forslag (sletter det fra køen)
+  const rejectSubmission = async (id) => {
+    await deleteDoc(doc(db, "submissions", id));
+    fetchSubmissions();
   };
 
   // ---------- alle unike akkorder (for filter-pills), sortert etter hvor ofte de brukes ----------
@@ -211,7 +241,8 @@ export default function App() {
               setSelected={setSelected} search={search} setSearch={setSearch}
               genderFilter={genderFilter} setGenderFilter={setGenderFilter}
               priceFilter={priceFilter} setPriceFilter={setPriceFilter}
-              allAccords={allAccords} accordFilter={accordFilter} setAccordFilter={setAccordFilter} t={t}
+              allAccords={allAccords} accordFilter={accordFilter} setAccordFilter={setAccordFilter}
+              setTab={setTab} t={t}
             />
           )}
           {tab === "toplists" && (
@@ -220,7 +251,9 @@ export default function App() {
           {tab === "account" && (
             <Account user={user} profile={profile} setProfile={setProfile}
               isAdmin={isAdmin} seedDatabase={seedDatabase} perfumeCount={perfumes.length}
-              ratingCount={ratings.length} t={t} />
+              ratingCount={ratings.length} t={t}
+              addSubmission={addSubmission} submissions={submissions}
+              rejectSubmission={rejectSubmission} />
           )}
         </>
       )}
@@ -277,7 +310,7 @@ function Header({ user, tab, setTab, setSelected, t, lang, setLang }) {
 // ---------- Discover ----------
 function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
   search, setSearch, genderFilter, setGenderFilter, priceFilter, setPriceFilter,
-  allAccords, accordFilter, setAccordFilter, t }) {
+  allAccords, accordFilter, setAccordFilter, setTab, t }) {
   const [showFilters, setShowFilters] = useState(false);
   const [showAllAccords, setShowAllAccords] = useState(false);
   const sel = { padding: "9px 11px", background: "#fff", color: "#3a2b30", border: "1px solid #f0dce2", borderRadius: 8, flex: 1 };
@@ -346,7 +379,13 @@ function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
       </div>
 
       {filtered.length === 0 && (
-        <div style={{ ...box, textAlign: "center", color: "#a8909a", padding: 24 }}>{t.noResults}</div>
+        <div style={{ ...box, textAlign: "center", padding: 24 }}>
+          <div style={{ color: "#a8909a", marginBottom: 12 }}>{t.noResults}</div>
+          <div style={{ fontSize: 14, color: "#6a555c", marginBottom: 12 }}>{t.noResultsCta}</div>
+          <button onClick={() => setTab("account")} style={{
+            ...primaryBtn, width: "auto", padding: "9px 18px", display: "inline-block",
+          }}>{t.missingCtaBtn}</button>
+        </div>
       )}
 
       {filtered.map((p) => {
@@ -386,6 +425,20 @@ function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
           </div>
         );
       })}
+
+      {/* Takknemlig oppfordring nederst – vises når det faktisk er treff */}
+      {filtered.length > 0 && (
+        <div style={{
+          marginTop: 18, padding: "20px 22px", borderRadius: 14, textAlign: "center",
+          background: "linear-gradient(135deg, #fce4ec, #f6e4ee)", border: "1px solid #f6d0dd",
+        }}>
+          <div style={{ fontWeight: 700, color: "#c64a72", fontSize: 16, marginBottom: 6 }}>{t.missingCta}</div>
+          <div style={{ fontSize: 13, color: "#9a6b78", lineHeight: 1.5, maxWidth: 460, margin: "0 auto 14px" }}>{t.missingCtaSub}</div>
+          <button onClick={() => setTab("account")} style={{
+            ...primaryBtn, width: "auto", padding: "10px 22px", display: "inline-block",
+          }}>{t.missingCtaBtn}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -564,13 +617,25 @@ function TopListColumn({ defaultGender, defaultAge, ranges, demoTopList, setSele
 }
 
 // ---------- Account ----------
-function Account({ user, profile, setProfile, isAdmin, seedDatabase, perfumeCount, ratingCount, t }) {
+function Account({ user, profile, setProfile, isAdmin, seedDatabase, perfumeCount, ratingCount, t,
+  addSubmission, submissions, rejectSubmission }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [mode, setMode] = useState("login");
   const [gender, setGender] = useState(profile?.gender || "Masculine");
   const [age, setAge] = useState(profile?.age || "");
+  // forslag-skjema
+  const [sName, setSName] = useState("");
+  const [sHouse, setSHouse] = useState("");
+  const [sNote, setSNote] = useState("");
+  const [sSent, setSSent] = useState(false);
+
+  const sendSuggestion = async () => {
+    if (!sName.trim() || !sHouse.trim()) return;
+    const ok = await addSubmission({ name: sName.trim(), house: sHouse.trim(), note: sNote.trim() });
+    if (ok) { setSName(""); setSHouse(""); setSNote(""); setSSent(true); setTimeout(() => setSSent(false), 4000); }
+  };
 
   const authAction = async () => {
     try {
@@ -631,6 +696,41 @@ function Account({ user, profile, setProfile, isAdmin, seedDatabase, perfumeCoun
         <input style={sel} type="number" placeholder={t.age} value={age} onChange={(e) => setAge(e.target.value)} />
         <button onClick={saveProfile} style={primaryBtn}>{t.save}</button>
       </div>
+
+      {/* Foreslå en parfyme – alle innloggede */}
+      <div style={{ ...box, marginTop: 12 }}>
+        <strong>{t.addPerfumeTitle}</strong>
+        <div style={{ fontSize: 12, color: "#a8909a", marginBottom: 10 }}>{t.addPerfumeSub}</div>
+        <input style={sel} placeholder={t.fldName} value={sName} onChange={(e) => setSName(e.target.value)} />
+        <input style={sel} placeholder={t.fldHouse} value={sHouse} onChange={(e) => setSHouse(e.target.value)} />
+        <input style={sel} placeholder={t.fldNote} value={sNote} onChange={(e) => setSNote(e.target.value)} />
+        <button onClick={sendSuggestion} disabled={!sName.trim() || !sHouse.trim()}
+          style={{ ...primaryBtn, opacity: (!sName.trim() || !sHouse.trim()) ? 0.5 : 1 }}>{t.submitSuggestion}</button>
+        {sSent && <div style={{ fontSize: 13, color: "#3a8a5a", marginTop: 8, textAlign: "center" }}>{t.suggestionThanks}</div>}
+      </div>
+
+      {/* Admin: godkjenningskø */}
+      {isAdmin && (
+        <div style={{ ...box, marginTop: 12, border: "1px solid #e8829e" }}>
+          <strong>{t.pendingQueue} ({submissions.length})</strong>
+          {submissions.length === 0 && (
+            <div style={{ fontSize: 13, color: "#a8909a", marginTop: 8 }}>{t.noPending}</div>
+          )}
+          {submissions.map((s) => (
+            <div key={s.id} style={{ ...card, marginTop: 8, cursor: "default", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: "#3a2b30" }}>{s.name} <span style={{ fontWeight: 400, color: "#9a8088" }}>· {s.house}</span></div>
+                {s.note && <div style={{ fontSize: 12, color: "#9a8088", marginTop: 2 }}>{s.note}</div>}
+                <div style={{ fontSize: 11, color: "#b59aa2", marginTop: 4 }}>{t.by} {s.submittedByName}</div>
+              </div>
+              <button onClick={() => rejectSubmission(s.id)} style={{
+                background: "none", border: "1px solid #e8a0b4", color: "#c64a72", borderRadius: 8,
+                padding: "5px 10px", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap", flexShrink: 0,
+              }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {isAdmin && (
         <div style={{ ...box, marginTop: 12, border: "1px solid #e8829e" }}>
