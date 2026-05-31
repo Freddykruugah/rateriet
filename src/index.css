@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background:
+    radial-gradient(1100px 600px at 80% -5%, rgba(244,194,205,0.55), transparent 55%),
+    radial-gradient(900px 700px at -5% 10%, rgba(248,224,232,0.6), transparent 55%),
+    radial-gradient(800px 800px at 110% 100%, rgba(236,210,224,0.5), transparent 55%),
+    linear-gradient(160deg, #fdf6f4 0%, #fbeef0 50%, #fdf3ef 100%);
+  background-attachment: fixed;
+  color: #3a2b30;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, .serif { font-family: 'Cormorant Garamond', Georgia, serif; }
+input, select, textarea, button { font-family: inherit; }
+a { color: inherit; }
+::placeholder { color: #b59aa2; }
+
+@keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.rise { animation: riseIn 0.4s ease both; }
