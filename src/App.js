@@ -278,43 +278,65 @@ function Header({ user, tab, setTab, setSelected, t, lang, setLang }) {
 function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
   search, setSearch, genderFilter, setGenderFilter, priceFilter, setPriceFilter,
   allAccords, accordFilter, setAccordFilter, t }) {
-  const sel = { padding: "9px 11px", background: "#fff", color: "#3a2b30", border: "1px solid #f0dce2", borderRadius: 8 };
+  const [showFilters, setShowFilters] = useState(false);
+  const [showAllAccords, setShowAllAccords] = useState(false);
+  const sel = { padding: "9px 11px", background: "#fff", color: "#3a2b30", border: "1px solid #f0dce2", borderRadius: 8, flex: 1 };
   const toggleAccord = (a) =>
     setAccordFilter(accordFilter.includes(a) ? accordFilter.filter((x) => x !== a) : [...accordFilter, a]);
-  const hasFilters = accordFilter.length > 0 || genderFilter !== "All" || priceFilter !== "All" || search;
+  const activeCount = accordFilter.length + (genderFilter !== "All" ? 1 : 0) + (priceFilter !== "All" ? 1 : 0);
+  const hasFilters = activeCount > 0 || search;
   const clearAll = () => { setAccordFilter([]); setGenderFilter("All"); setPriceFilter("All"); setSearch(""); };
+  const visibleAccords = showAllAccords ? allAccords : allAccords.slice(0, 12);
   return (
     <div>
-      <input value={search} onChange={(e) => setSearch(e.target.value)}
-        placeholder={t.searchPlaceholder}
-        style={{ ...sel, width: "100%", marginBottom: 10 }} />
+      {/* søk + filter-knapp på samme rad */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={sel}>
-          {["All", "Masculine", "Feminine", "Unisex"].map((g) => <option key={g} value={g}>{genderLabel(t, g)}</option>)}
-        </select>
-        <select value={priceFilter} onChange={(e) => setPriceFilter(e.target.value)} style={sel}>
-          {["All", "budget", "mid", "luxury"].map((p) => <option key={p} value={p}>{p === "All" ? t.allPrices : priceLabel(t, p)}</option>)}
-        </select>
+        <input value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder={t.searchPlaceholder}
+          style={{ ...sel, flex: 1 }} />
+        <button onClick={() => setShowFilters(!showFilters)} style={{
+          padding: "9px 14px", background: (showFilters || activeCount) ? "#fbe4ec" : "#fff",
+          color: "#c64a72", border: `1px solid ${activeCount ? "#e8829e" : "#f0dce2"}`,
+          borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap",
+        }}>
+          {t.filters}{activeCount > 0 ? ` (${activeCount})` : ""}
+        </button>
       </div>
 
-      {/* akkord-filter (klikkbare pills) */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: "#a8909a", marginBottom: 7 }}>{t.filterByScent}</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {allAccords.map((a) => {
-            const on = accordFilter.includes(a);
-            return (
-              <button key={a} onClick={() => toggleAccord(a)} style={{
+      {/* sammenleggbar filter-sone */}
+      {showFilters && (
+        <div style={{ ...box, marginBottom: 14, padding: 16 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={sel}>
+              {["All", "Masculine", "Feminine", "Unisex"].map((g) => <option key={g} value={g}>{genderLabel(t, g)}</option>)}
+            </select>
+            <select value={priceFilter} onChange={(e) => setPriceFilter(e.target.value)} style={sel}>
+              {["All", "budget", "mid", "luxury"].map((p) => <option key={p} value={p}>{p === "All" ? t.allPrices : priceLabel(t, p)}</option>)}
+            </select>
+          </div>
+          <div style={{ fontSize: 12, color: "#a8909a", marginBottom: 7 }}>{t.filterByScent}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {visibleAccords.map((a) => {
+              const on = accordFilter.includes(a);
+              return (
+                <button key={a} onClick={() => toggleAccord(a)} style={{
+                  fontSize: 12, padding: "5px 11px", borderRadius: 14, cursor: "pointer",
+                  background: on ? accordColor(a) : "#fff",
+                  color: on ? "#fff" : "#6a555c",
+                  border: `1px solid ${on ? accordColor(a) : "#ecd6de"}`,
+                  fontWeight: on ? 700 : 500, transition: "all 0.12s",
+                }}>{a}</button>
+              );
+            })}
+            {allAccords.length > 12 && (
+              <button onClick={() => setShowAllAccords(!showAllAccords)} style={{
                 fontSize: 12, padding: "5px 11px", borderRadius: 14, cursor: "pointer",
-                background: on ? accordColor(a) : "#fff",
-                color: on ? "#fff" : "#6a555c",
-                border: `1px solid ${on ? accordColor(a) : "#ecd6de"}`,
-                fontWeight: on ? 700 : 500, transition: "all 0.12s",
-              }}>{a}</button>
-            );
-          })}
+                background: "none", color: "#d96b8a", border: "none", fontWeight: 600, textDecoration: "underline",
+              }}>{showAllAccords ? t.showLess : `${t.showAll} (${allAccords.length})`}</button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <span style={{ fontSize: 13, color: "#a8909a" }}>{filtered.length} {t.perfumes}</span>
