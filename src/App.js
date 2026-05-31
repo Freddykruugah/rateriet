@@ -96,6 +96,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [genderFilter, setGenderFilter] = useState("All");
   const [priceFilter, setPriceFilter] = useState("All");
+  const [accordFilter, setAccordFilter] = useState([]); // valgte akkorder (AND-match)
 
   const isAdmin = user?.email === ADMIN_EMAIL;
 
@@ -160,13 +161,33 @@ export default function App() {
     alert("Seeded!");
   };
 
+  // ---------- alle unike akkorder (for filter-pills), sortert etter hvor ofte de brukes ----------
+  const allAccords = (() => {
+    const count = {};
+    perfumes.forEach((p) => {
+      if (p.dupeOf) return;
+      (p.accords || []).forEach((a) => { count[a] = (count[a] || 0) + 1; });
+    });
+    return Object.keys(count).sort((a, b) => count[b] - count[a]);
+  })();
+
   // ---------- filtered catalog ----------
   const filtered = perfumes.filter((p) => {
     if (p.dupeOf) return false; // duper vises på originalens side, ikke i hovedkatalogen
     if (genderFilter !== "All" && p.gender !== genderFilter) return false;
     if (priceFilter !== "All" && p.priceClass !== priceFilter) return false;
-    const q = search.toLowerCase();
-    if (q && !(`${p.name} ${p.house}`.toLowerCase().includes(q))) return false;
+    // akkord-filter: parfymen må ha ALLE valgte akkorder
+    if (accordFilter.length && !accordFilter.every((a) => (p.accords || []).includes(a))) return false;
+    // søk treffer navn, hus, noter og akkorder
+    const q = search.toLowerCase().trim();
+    if (q) {
+      const haystack = [
+        p.name, p.house,
+        ...(p.accords || []),
+        ...(p.topNotes || []), ...(p.heartNotes || []), ...(p.baseNotes || []),
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
     return true;
   }).sort((a, b) => scoreFor(b.id) - scoreFor(a.id));
 
@@ -189,7 +210,8 @@ export default function App() {
               filtered={filtered} scoreFor={scoreFor} ratingsFor={ratingsFor} dupesFor={dupesFor}
               setSelected={setSelected} search={search} setSearch={setSearch}
               genderFilter={genderFilter} setGenderFilter={setGenderFilter}
-              priceFilter={priceFilter} setPriceFilter={setPriceFilter} t={t}
+              priceFilter={priceFilter} setPriceFilter={setPriceFilter}
+              allAccords={allAccords} accordFilter={accordFilter} setAccordFilter={setAccordFilter} t={t}
             />
           )}
           {tab === "toplists" && (
@@ -254,14 +276,19 @@ function Header({ user, tab, setTab, setSelected, t, lang, setLang }) {
 
 // ---------- Discover ----------
 function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
-  search, setSearch, genderFilter, setGenderFilter, priceFilter, setPriceFilter, t }) {
+  search, setSearch, genderFilter, setGenderFilter, priceFilter, setPriceFilter,
+  allAccords, accordFilter, setAccordFilter, t }) {
   const sel = { padding: "9px 11px", background: "#fff", color: "#3a2b30", border: "1px solid #f0dce2", borderRadius: 8 };
+  const toggleAccord = (a) =>
+    setAccordFilter(accordFilter.includes(a) ? accordFilter.filter((x) => x !== a) : [...accordFilter, a]);
+  const hasFilters = accordFilter.length > 0 || genderFilter !== "All" || priceFilter !== "All" || search;
+  const clearAll = () => { setAccordFilter([]); setGenderFilter("All"); setPriceFilter("All"); setSearch(""); };
   return (
     <div>
       <input value={search} onChange={(e) => setSearch(e.target.value)}
         placeholder={t.searchPlaceholder}
         style={{ ...sel, width: "100%", marginBottom: 10 }} />
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={sel}>
           {["All", "Masculine", "Feminine", "Unisex"].map((g) => <option key={g} value={g}>{genderLabel(t, g)}</option>)}
         </select>
@@ -269,7 +296,37 @@ function Discover({ filtered, scoreFor, ratingsFor, dupesFor, setSelected,
           {["All", "budget", "mid", "luxury"].map((p) => <option key={p} value={p}>{p === "All" ? t.allPrices : priceLabel(t, p)}</option>)}
         </select>
       </div>
-      <div style={{ fontSize: 13, color: "#a8909a", marginBottom: 10 }}>{filtered.length} {t.perfumes}</div>
+
+      {/* akkord-filter (klikkbare pills) */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#a8909a", marginBottom: 7 }}>{t.filterByScent}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {allAccords.map((a) => {
+            const on = accordFilter.includes(a);
+            return (
+              <button key={a} onClick={() => toggleAccord(a)} style={{
+                fontSize: 12, padding: "5px 11px", borderRadius: 14, cursor: "pointer",
+                background: on ? accordColor(a) : "#fff",
+                color: on ? "#fff" : "#6a555c",
+                border: `1px solid ${on ? accordColor(a) : "#ecd6de"}`,
+                fontWeight: on ? 700 : 500, transition: "all 0.12s",
+              }}>{a}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 13, color: "#a8909a" }}>{filtered.length} {t.perfumes}</span>
+        {hasFilters && (
+          <button onClick={clearAll} style={{ ...linkBtn, fontSize: 13 }}>{t.clearFilters}</button>
+        )}
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{ ...box, textAlign: "center", color: "#a8909a", padding: 24 }}>{t.noResults}</div>
+      )}
+
       {filtered.map((p) => {
         const score = scoreFor(p.id), dupes = dupesFor(p.id).length;
         return (
